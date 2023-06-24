@@ -1,0 +1,72 @@
+service: auth-test
+# app and org for use with dashboard.serverless.com
+app: aws-node
+org: quantranbb
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+frameworkVersion: '3'
+
+plugins:
+  - serverless-webpack
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: ap-southeast-1
+#  stage: "test"
+
+functions:
+  authorizerFunc:
+    handler: src/authorization-handler.handler
+
+resources:
+  Outputs:
+    RestApiId:
+      Value:
+        Ref: ApiGatewayRestApi
+      Export:
+        Name: api-gateway:${self:service}:rest-api-id
+    RootResourceId:
+      Value:
+        Fn::GetAtt: ApiGatewayRestApi.RootResourceId
+      Export:
+        Name: api-gateway:${self:service}:root-resource-id
+    AuthorizerRef:
+      Value:
+        Ref: ApiGatewayAuthorizer
+      Export:
+        Name: authorizer-ref:dev
+  Resources:
+      ApiGatewayRestApi:
+        Type: AWS::ApiGateway::RestApi
+        Properties:
+          Name: ${self:service}-dev
+          Description: my API Gateway
+
+      ApiGatewayAuthorizer:
+        DependsOn:
+          - ApiGatewayRestApi
+        Type: AWS::ApiGateway::Authorizer
+        Properties:
+          Name: Mobile_order_auth
+          # apparently ApiGatewayRestApi is a global string
+          RestApiId: { "Ref" : "ApiGatewayRestApi" }
+          IdentitySource: method.request.header.Authorization
+          Type: TOKEN
+          AuthorizerUri: !Join
+            - ''
+            - - 'arn:aws:apigateway:'
+              - !Ref AWS::Region
+              - ':lambda:path/2015-03-31/functions/'
+              - !GetAtt
+                - AuthorizerFuncLambdaFunction
+                - Arn
+              - /invocations
+
+custom:
+  webpack:
+    webpackConfig: './webpack.config.js' # Name of webpack configuration file
+    includeModules: true # Node modules configuration for packaging
+    packager: 'yarn' # Packager that will be used to package your external modules
+    excludeFiles: src/**/*.test.js # Provide a glob for files to ignore
